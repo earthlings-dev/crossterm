@@ -1,4 +1,5 @@
 #![deny(unused_imports, unused_must_use)]
+#![allow(unexpected_cfgs)]
 
 //! # Cross-platform Terminal Manipulation Library
 //!
@@ -54,6 +55,9 @@
 //!   - Colors - [`SetForegroundColor`](style/struct.SetForegroundColor.html),
 //!     [`SetBackgroundColor`](style/struct.SetBackgroundColor.html),
 //!     [`ResetColor`](style/struct.ResetColor.html), [`SetColors`](style/struct.SetColors.html)
+//!     (and, on Unix with the `events` feature, [`query_foreground_color`](style/fn.query_foreground_color.html)
+//!     and [`query_background_color`](style/fn.query_background_color.html) for reading the active
+//!     terminal colors)
 //!   - Attributes - [`SetAttribute`](style/struct.SetAttribute.html), [`SetAttributes`](style/struct.SetAttributes.html),
 //!     [`PrintStyledContent`](style/struct.PrintStyledContent.html)
 //! - Module [`terminal`](terminal/index.html)
@@ -261,4 +265,6 @@ mod command;
 pub(crate) mod macros;
 
 #[cfg(all(windows, not(feature = "windows")))]
-compile_error!("Compiling on Windows with \"windows\" feature disabled. Feature \"windows\" should only be disabled when project will never be compiled on Windows.");
+compile_error!(
+    "Compiling on Windows with \"windows\" feature disabled. Feature \"windows\" should only be disabled when project will never be compiled on Windows."
+);

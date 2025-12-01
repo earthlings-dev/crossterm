@@ -163,6 +163,53 @@ impl Color {
         }
         Some(color)
     }
+
+    /// Parse an OSC color payload (`rgb:` or `rgba:`) into a [`Color::Rgb`].
+    pub(crate) fn from_osc_rgb(payload: &str) -> Option<Self> {
+        parse_osc_rgb(payload).map(|(r, g, b)| Color::Rgb { r, g, b })
+    }
+}
+
+pub(crate) fn parse_osc_rgb(payload: &str) -> Option<(u8, u8, u8)> {
+    let payload = payload.trim();
+    let (prefix, values) = payload.split_once(':')?;
+    let prefix = prefix.to_ascii_lowercase();
+    if prefix != "rgb" && prefix != "rgba" {
+        return None;
+    }
+
+    let mut parts = values.split('/');
+    let r = parse_osc_component(parts.next()?)?;
+    let g = parse_osc_component(parts.next()?)?;
+    let b = parse_osc_component(parts.next()?)?;
+
+    match prefix.as_str() {
+        "rgb" => {
+            if parts.next().is_some() {
+                return None;
+            }
+        }
+        "rgba" => {
+            // Validate alpha component but ignore it.
+            parse_osc_component(parts.next()?)?;
+            if parts.next().is_some() {
+                return None;
+            }
+        }
+        _ => unreachable!(),
+    }
+
+    Some((r, g, b))
+}
+
+fn parse_osc_component(component: &str) -> Option<u8> {
+    match component.len() {
+        2 => u8::from_str_radix(component, 16).ok(),
+        4 => u16::from_str_radix(component, 16)
+            .ok()
+            .map(|value| (value / 257) as u8),
+        _ => None,
+    }
 }
 
 impl TryFrom<&str> for Color {
@@ -304,15 +351,16 @@ impl<'de> serde::de::Deserialize<'de> for Color {
                                 return Ok(Color::Rgb { r, g, b });
                             }
                         }
-                    } else if let Some(hex) = value.strip_prefix('#') {
-                        if hex.is_ascii() && hex.len() == 6 {
-                            let r = u8::from_str_radix(&hex[0..2], 16);
-                            let g = u8::from_str_radix(&hex[2..4], 16);
-                            let b = u8::from_str_radix(&hex[4..6], 16);
+                    } else if let Some(hex) = value.strip_prefix('#')
+                        && hex.is_ascii()
+                        && hex.len() == 6
+                    {
+                        let r = u8::from_str_radix(&hex[0..2], 16);
+                        let g = u8::from_str_radix(&hex[2..4], 16);
+                        let b = u8::from_str_radix(&hex[4..6], 16);
 
-                            if let (Ok(r), Ok(g), Ok(b)) = (r, g, b) {
-                                return Ok(Color::Rgb { r, g, b });
-                            }
+                        if let (Ok(r), Ok(g), Ok(b)) = (r, g, b) {
+                            return Ok(Color::Rgb { r, g, b });
                         }
                     }
 
@@ -327,7 +375,7 @@ impl<'de> serde::de::Deserialize<'de> for Color {
 
 #[cfg(test)]
 mod tests {
-    use super::Color;
+    use super::{Color, parse_osc_rgb};
 
     #[test]
     fn test_known_color_conversion() {
@@ -366,6 +414,32 @@ mod tests {
                 b: 255
             }
         );
+    }
+
+    #[test]
+    fn test_parse_osc_rgb_short_components() {
+        assert_eq!(parse_osc_rgb("rgb:ff/00/7f"), Some((255, 0, 127)));
+    }
+
+    #[test]
+    fn test_parse_osc_rgb_long_components() {
+        assert_eq!(parse_osc_rgb("rgb:ffff/8000/0000"), Some((255, 128, 0)));
+    }
+
+    #[test]
+    fn test_parse_osc_rgba_ignored_alpha() {
+        assert_eq!(
+            parse_osc_rgb("rgba:aaaa/bbbb/cccc/dddd"),
+            Some((170, 187, 204))
+        );
+    }
+
+    #[test]
+    fn test_parse_osc_rgb_invalid_payload() {
+        assert_eq!(parse_osc_rgb("rgb:?"), None);
+        assert_eq!(parse_osc_rgb("rgb:ff/00"), None);
+        assert_eq!(parse_osc_rgb("rgba:ff/00/00"), None);
+        assert_eq!(parse_osc_rgb("rgb:ff/00/00/11"), None);
     }
 }
 

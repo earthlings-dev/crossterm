@@ -9,8 +9,8 @@ license = "MIT"
 keywords = ["event", "color", "cli", "input", "terminal"]
 exclude = ["target", "Cargo.lock"]
 readme = "README.md"
-edition = "2021"
-rust-version = "1.63.0"
+edition = "2024"
+rust-version = "1.91.1"
 categories = ["command-line-interface", "command-line-utilities"]
 
 [lib]
@@ -118,6 +118,10 @@ required-features = ["events"]
 
 [[example]]
 name = "key-display"
+required-features = ["events"]
+
+[[example]]
+name = "query-colors"
 required-features = ["events"]
 
 [[example]]
