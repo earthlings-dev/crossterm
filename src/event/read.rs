@@ -458,9 +458,10 @@ mod tests {
         fn try_read(&mut self, _timeout: Option<Duration>) -> io::Result<Option<InternalEvent>> {
             // Return error if set in case there's just one remaining event
             if self.events.len() == 1
-                && let Some(error) = self.error.take() {
-                    return Err(error);
-                }
+                && let Some(error) = self.error.take()
+            {
+                return Err(error);
+            }
 
             // Return all events from the queue
             if let Some(event) = self.events.pop_front() {

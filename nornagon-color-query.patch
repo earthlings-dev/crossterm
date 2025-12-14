@@ -1,0 +1,602 @@
+From 87db8bfa6dc99427fd3b071681b07fc31c6ce995 Mon Sep 17 00:00:00 2001
+From: Jeremy Rose <nornagon@nornagon.net>
+Date: Wed, 29 Oct 2025 16:21:46 -0700
+Subject: [PATCH] add query_*_color
+
+---
+ CHANGELOG.md                |   5 ++
+ Cargo.toml                  |   4 ++
+ README.md                   |  16 ++++++
+ examples/query-colors.rs    |  16 ++++++
+ src/event.rs                |  13 +++++
+ src/event/filter.rs         |  52 ++++++++++++++----
+ src/event/sys/unix/parse.rs |  95 ++++++++++++++++++++++++++++++++-
+ src/lib.rs                  |   4 ++
+ src/style.rs                |  13 +++++
+ src/style/query.rs          | 103 ++++++++++++++++++++++++++++++++++++
+ src/style/types/color.rs    |  75 +++++++++++++++++++++++++-
+ 11 files changed, 382 insertions(+), 14 deletions(-)
+ create mode 100644 examples/query-colors.rs
+ create mode 100644 src/style/query.rs
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 6a2a2f0..e50c0be 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,10 @@
+ # Unreleased
+ 
++## Added ⭐
++
++- Query terminal default colors via OSC 10/11 on Unix using `query_foreground_color` and
++  `query_background_color`.
++
+ # Version 0.28.1
+ 
+ ## Fixed 🐛
+diff --git a/Cargo.toml b/Cargo.toml
+index 27d6448..7d6d856 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -133,3 +133,7 @@ required-features = ["events"]
+ [[example]]
+ name = "key-display"
+ required-features = ["events"]
++
++[[example]]
++name = "query-colors"
++required-features = ["events"]
+diff --git a/README.md b/README.md
+index 1fabfe0..6b72b32 100644
+--- a/README.md
++++ b/README.md
+@@ -139,6 +139,22 @@ fn main() -> std::io::Result<()> {
+ 
+ Checkout this [list](https://docs.rs/crossterm/latest/crossterm/index.html#supported-commands) with all possible commands.
+ 
++When the `events` feature is enabled on Unix-like systems you can query the terminal's default
++palette:
++
++```rust
++use crossterm::style::{query_background_color, query_foreground_color};
++
++fn main() -> std::io::Result<()> {
++    println!("Foreground: {:?}", query_foreground_color()?);
++    println!("Background: {:?}", query_background_color()?);
++    Ok(())
++}
++```
++
++Each function returns `io::Result<Option<Color>>`, where `None` indicates that the terminal
++responded but the payload could not be parsed.
++
+ ### Feature Flags
+ 
+ ```toml
+diff --git a/examples/query-colors.rs b/examples/query-colors.rs
+new file mode 100644
+index 0000000..006d958
+--- /dev/null
++++ b/examples/query-colors.rs
+@@ -0,0 +1,16 @@
++use std::io;
++
++use crossterm::style::{query_background_color, query_foreground_color};
++
++fn main() -> io::Result<()> {
++    print_color("Foreground", query_foreground_color()?);
++    print_color("Background", query_background_color()?);
++    Ok(())
++}
++
++fn print_color(label: &str, color: Option<crossterm::style::Color>) {
++    match color {
++        Some(value) => println!("{label}: {:?}", value),
++        None => println!("{label}: (unrecognized response)"),
++    }
++}
+diff --git a/src/event.rs b/src/event.rs
+index 4d28dc1..76661f1 100644
+--- a/src/event.rs
++++ b/src/event.rs
+@@ -1183,6 +1183,19 @@ pub(crate) enum InternalEvent {
+     /// Attributes and architectural class of the terminal.
+     #[cfg(unix)]
+     PrimaryDeviceAttributes,
++    /// OSC color response (`slot`, `payload`).
++    #[cfg(unix)]
++    OscColor { slot: u8, payload: OscColorPayload },
++}
++
++/// Parsed payload of an OSC color response.
++#[cfg(unix)]
++#[derive(Debug, PartialOrd, PartialEq, Hash, Clone, Eq)]
++pub(crate) enum OscColorPayload {
++    /// Parsed RGB values (always 8-bit per channel).
++    Rgb { r: u8, g: u8, b: u8 },
++    /// Payload was returned but not recognized/parsible.
++    Unrecognized(String),
+ }
+ 
+ #[cfg(test)]
+diff --git a/src/event/filter.rs b/src/event/filter.rs
+index f78730d..0d656cb 100644
+--- a/src/event/filter.rs
++++ b/src/event/filter.rs
+@@ -46,6 +46,22 @@ impl Filter for PrimaryDeviceAttributesFilter {
+     }
+ }
+ 
++#[cfg(unix)]
++#[derive(Debug, Clone)]
++pub(crate) struct OscColorFilter {
++    pub(crate) slot: u8,
++}
++
++#[cfg(unix)]
++impl Filter for OscColorFilter {
++    fn eval(&self, event: &InternalEvent) -> bool {
++        matches!(
++            *event,
++            InternalEvent::OscColor { slot, .. } if slot == self.slot
++        )
++    }
++}
++
+ #[derive(Debug, Clone)]
+ pub(crate) struct EventFilter;
+ 
+@@ -61,22 +77,25 @@ impl Filter for EventFilter {
+     }
+ }
+ 
+-#[derive(Debug, Clone)]
+-pub(crate) struct InternalEventFilter;
+-
+-impl Filter for InternalEventFilter {
+-    fn eval(&self, _: &InternalEvent) -> bool {
+-        true
+-    }
+-}
+-
+ #[cfg(test)]
+ #[cfg(unix)]
+ mod tests {
+     use super::{
+-        super::Event, CursorPositionFilter, EventFilter, Filter, InternalEvent,
+-        InternalEventFilter, KeyboardEnhancementFlagsFilter, PrimaryDeviceAttributesFilter,
++        CursorPositionFilter, EventFilter, Filter, KeyboardEnhancementFlagsFilter, OscColorFilter,
++        PrimaryDeviceAttributesFilter,
+     };
++    use crate::event::Event;
++    use crate::event::{InternalEvent, OscColorPayload};
++    use InternalEvent::OscColor;
++
++    #[derive(Debug, Clone)]
++    struct InternalEventFilter;
++
++    impl Filter for InternalEventFilter {
++        fn eval(&self, _: &InternalEvent) -> bool {
++            true
++        }
++    }
+ 
+     #[test]
+     fn test_cursor_position_filter_filters_cursor_position() {
+@@ -101,6 +120,17 @@ mod tests {
+         assert!(PrimaryDeviceAttributesFilter.eval(&InternalEvent::PrimaryDeviceAttributes));
+     }
+ 
++    #[test]
++    fn test_osc_color_filter_matches_slot() {
++        let payload = OscColorPayload::Rgb { r: 1, g: 2, b: 3 };
++        let filter = OscColorFilter { slot: 10 };
++        assert!(filter.eval(&OscColor {
++            slot: 10,
++            payload: payload.clone()
++        }));
++        assert!(!filter.eval(&OscColor { slot: 11, payload }));
++    }
++
+     #[test]
+     fn test_event_filter_filters_events() {
+         assert!(EventFilter.eval(&InternalEvent::Event(Event::Resize(10, 10))));
+diff --git a/src/event/sys/unix/parse.rs b/src/event/sys/unix/parse.rs
+index 2019b5f..a382792 100644
+--- a/src/event/sys/unix/parse.rs
++++ b/src/event/sys/unix/parse.rs
+@@ -5,7 +5,8 @@ use crate::event::{
+     MediaKeyCode, ModifierKeyCode, MouseButton, MouseEvent, MouseEventKind,
+ };
+ 
+-use super::super::super::InternalEvent;
++use crate::event::{InternalEvent, OscColorPayload};
++use crate::style::Color;
+ 
+ // Event parsing
+ //
+@@ -23,6 +24,55 @@ fn could_not_parse_event_error() -> io::Error {
+     io::Error::new(io::ErrorKind::Other, "Could not parse an event.")
+ }
+ 
++fn parse_osc(buffer: &[u8]) -> io::Result<Option<InternalEvent>> {
++    debug_assert!(buffer.starts_with(b"\x1B]"));
++
++    let Some(content_end) = osc_payload_end(buffer) else {
++        return Ok(None);
++    };
++
++    let text = String::from_utf8_lossy(&buffer[2..content_end]);
++    let mut parts = text.splitn(2, ';');
++
++    let slot = match parts.next().unwrap_or("").parse::<u16>() {
++        Ok(value) if value <= u8::MAX as u16 => value as u8,
++        _ => return Ok(None),
++    };
++
++    if slot != 10 && slot != 11 {
++        return Ok(None);
++    }
++
++    let payload_str = parts.next().unwrap_or("");
++    let payload = match Color::from_osc_rgb(payload_str) {
++        Some(Color::Rgb { r, g, b }) => OscColorPayload::Rgb { r, g, b },
++        Some(_) => unreachable!("Color::from_osc_rgb returned non-RGB variant"),
++        None => OscColorPayload::Unrecognized(payload_str.to_string()),
++    };
++
++    Ok(Some(InternalEvent::OscColor { slot, payload }))
++}
++
++fn osc_payload_end(buffer: &[u8]) -> Option<usize> {
++    let mut idx = 2;
++    while idx < buffer.len() {
++        match buffer[idx] {
++            0x07 => return Some(idx),
++            0x1B => {
++                if idx + 1 >= buffer.len() {
++                    return None;
++                }
++                if buffer[idx + 1] == b'\\' {
++                    return Some(idx);
++                }
++            }
++            _ => {}
++        }
++        idx += 1;
++    }
++    None
++}
++
+ pub(crate) fn parse_event(
+     buffer: &[u8],
+     input_available: bool,
+@@ -74,6 +124,7 @@ pub(crate) fn parse_event(
+                         }
+                     }
+                     b'[' => parse_csi(buffer),
++                    b']' => parse_osc(buffer),
+                     b'\x1B' => Ok(Some(InternalEvent::Event(Event::Key(KeyCode::Esc.into())))),
+                     _ => parse_event(&buffer[1..], input_available).map(|event_option| {
+                         event_option.map(|event| {
+@@ -863,7 +914,7 @@ pub(crate) fn parse_utf8_char(buffer: &[u8]) -> io::Result<Option<char>> {
+ 
+ #[cfg(test)]
+ mod tests {
+-    use crate::event::{KeyEventState, KeyModifiers, MouseButton, MouseEvent};
++    use crate::event::{KeyEventState, KeyModifiers, MouseButton, MouseEvent, OscColorPayload};
+ 
+     use super::*;
+ 
+@@ -1503,4 +1554,44 @@ mod tests {
+             )))),
+         );
+     }
++
++    #[test]
++    fn test_parse_osc_color_with_bel_terminator() {
++        match parse_event(b"\x1B]10;rgb:ffff/8000/0000\x07", false).unwrap() {
++            Some(InternalEvent::OscColor { slot, payload }) => {
++                assert_eq!(slot, 10);
++                assert_eq!(
++                    payload,
++                    OscColorPayload::Rgb {
++                        r: 255,
++                        g: 128,
++                        b: 0
++                    }
++                );
++            }
++            other => panic!("unexpected event: {other:?}"),
++        }
++    }
++
++    #[test]
++    fn test_parse_osc_color_with_st_terminator() {
++        match parse_event(b"\x1B]11;rgb:0000/0000/ffff\x1B\\", false).unwrap() {
++            Some(InternalEvent::OscColor { slot, payload }) => {
++                assert_eq!(slot, 11);
++                assert_eq!(payload, OscColorPayload::Rgb { r: 0, g: 0, b: 255 });
++            }
++            other => panic!("unexpected event: {other:?}"),
++        }
++    }
++
++    #[test]
++    fn test_parse_osc_color_unrecognized_payload() {
++        match parse_event(b"\x1B]10;?\x07", false).unwrap() {
++            Some(InternalEvent::OscColor { slot, payload }) => {
++                assert_eq!(slot, 10);
++                assert_eq!(payload, OscColorPayload::Unrecognized("?".to_string()));
++            }
++            other => panic!("unexpected event: {other:?}"),
++        }
++    }
+ }
+diff --git a/src/lib.rs b/src/lib.rs
+index 0217bef..3b81fa8 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,4 +1,5 @@
+ #![deny(unused_imports, unused_must_use)]
++#![allow(unexpected_cfgs)]
+ 
+ //! # Cross-platform Terminal Manipulation Library
+ //!
+@@ -54,6 +55,9 @@
+ //!   - Colors - [`SetForegroundColor`](style/struct.SetForegroundColor.html),
+ //!     [`SetBackgroundColor`](style/struct.SetBackgroundColor.html),
+ //!     [`ResetColor`](style/struct.ResetColor.html), [`SetColors`](style/struct.SetColors.html)
++//!     (and, on Unix with the `events` feature, [`query_foreground_color`](style/fn.query_foreground_color.html)
++//!     and [`query_background_color`](style/fn.query_background_color.html) for reading the active
++//!     terminal colors)
+ //!   - Attributes - [`SetAttribute`](style/struct.SetAttribute.html), [`SetAttributes`](style/struct.SetAttributes.html),
+ //!     [`PrintStyledContent`](style/struct.PrintStyledContent.html)
+ //! - Module [`terminal`](terminal/index.html)
+diff --git a/src/style.rs b/src/style.rs
+index b67a421..97f782a 100644
+--- a/src/style.rs
++++ b/src/style.rs
+@@ -58,6 +58,15 @@
+ //! println!("{}", "Red foreground color & blue background.".red().on_blue());
+ //! ```
+ //!
++//! ### Color Queries
++//!
++//! When the `events` feature is enabled on Unix-like platforms, the helper functions
++//! [`query_foreground_color`] and [`query_background_color`] can be used to ask the terminal for
++//! its active default colors. Each function returns `io::Result<Option<Color>>`, yielding
++//! `Some(Color::Rgb { .. })` when the terminal responds with an OSC 10/11 RGB value, `Ok(None)` if
++//! the payload is not recognized, or an error if the terminal does not respond within two seconds.
++//! On other platforms the functions return [`io::ErrorKind::Unsupported`].
++//!
+ //! ### Attributes
+ //!
+ //! How to apply terminal attributes to text.
+@@ -129,10 +138,14 @@ pub use self::{
+ 
+ mod attributes;
+ mod content_style;
++#[cfg(feature = "events")]
++mod query;
+ mod styled_content;
+ mod stylize;
+ mod sys;
+ mod types;
++#[cfg(feature = "events")]
++pub use query::{query_background_color, query_foreground_color};
+ 
+ /// Creates a `StyledContent`.
+ ///
+diff --git a/src/style/query.rs b/src/style/query.rs
+new file mode 100644
+index 0000000..85e0014
+--- /dev/null
++++ b/src/style/query.rs
+@@ -0,0 +1,103 @@
++use std::io;
++
++use crate::style::Color;
++
++#[cfg(all(unix, feature = "events"))]
++use std::{fs::File, io::Write, time::Duration};
++
++#[cfg(all(unix, feature = "events"))]
++use crate::{
++    event::{
++        filter::OscColorFilter, poll_internal, read_internal, InternalEvent, OscColorPayload,
++    },
++    terminal::{disable_raw_mode, enable_raw_mode},
++};
++
++/// Query the terminal for its current foreground color.
++#[cfg(all(unix, feature = "events"))]
++pub fn query_foreground_color() -> io::Result<Option<Color>> {
++    query_color_slot(10)
++}
++
++/// Query the terminal for its current background color.
++#[cfg(all(unix, feature = "events"))]
++pub fn query_background_color() -> io::Result<Option<Color>> {
++    query_color_slot(11)
++}
++
++#[cfg(all(unix, feature = "events"))]
++fn query_color_slot(slot: u8) -> io::Result<Option<Color>> {
++    if crate::terminal::sys::is_raw_mode_enabled() {
++        query_color_slot_raw(slot)
++    } else {
++        enable_raw_mode()?;
++        let result = query_color_slot_raw(slot);
++        disable_raw_mode()?;
++        result
++    }
++}
++
++#[cfg(all(unix, feature = "events"))]
++fn query_color_slot_raw(slot: u8) -> io::Result<Option<Color>> {
++    send_query(slot)?;
++
++    let filter = OscColorFilter { slot };
++    loop {
++        match poll_internal(Some(Duration::from_millis(2000)), &filter) {
++            Ok(true) => match read_internal(&filter)? {
++                InternalEvent::OscColor { payload, .. } => {
++                    return Ok(match payload {
++                        OscColorPayload::Rgb { r, g, b } => Some(Color::Rgb { r, g, b }),
++                        OscColorPayload::Unrecognized(_) => None,
++                    });
++                }
++                _ => continue,
++            },
++            Ok(false) => {
++                return Err(io::Error::new(
++                    io::ErrorKind::Other,
++                    format!(
++                        "The terminal did not report OSC color {} within a normal duration",
++                        slot
++                    ),
++                ));
++            }
++            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
++            Err(err) => return Err(err),
++        }
++    }
++}
++
++#[cfg(all(unix, feature = "events"))]
++fn send_query(slot: u8) -> io::Result<()> {
++    let sequence = format!("\x1B]{};?\x1B\\", slot);
++
++    let sent = File::open("/dev/tty").and_then(|mut tty| {
++        tty.write_all(sequence.as_bytes())?;
++        tty.flush()
++    });
++
++    if sent.is_err() {
++        let mut stdout = io::stdout();
++        stdout.write_all(sequence.as_bytes())?;
++        stdout.flush()?;
++    }
++
++    Ok(())
++}
++
++#[cfg(not(all(unix, feature = "events")))]
++pub fn query_foreground_color() -> io::Result<Option<Color>> {
++    Err(io::Error::new(
++        io::ErrorKind::Unsupported,
++        "query_foreground_color requires the \"events\" feature on Unix platforms",
++    ))
++}
++
++#[cfg(not(all(unix, feature = "events")))]
++pub fn query_background_color() -> io::Result<Option<Color>> {
++    Err(io::Error::new(
++        io::ErrorKind::Unsupported,
++        "query_background_color requires the \"events\" feature on Unix platforms",
++    ))
++}
+diff --git a/src/style/types/color.rs b/src/style/types/color.rs
+index d4d5284..252e4f1 100644
+--- a/src/style/types/color.rs
++++ b/src/style/types/color.rs
+@@ -163,6 +163,53 @@ impl Color {
+         }
+         Some(color)
+     }
++
++    /// Parse an OSC color payload (`rgb:` or `rgba:`) into a [`Color::Rgb`].
++    pub(crate) fn from_osc_rgb(payload: &str) -> Option<Self> {
++        parse_osc_rgb(payload).map(|(r, g, b)| Color::Rgb { r, g, b })
++    }
++}
++
++pub(crate) fn parse_osc_rgb(payload: &str) -> Option<(u8, u8, u8)> {
++    let payload = payload.trim();
++    let (prefix, values) = payload.split_once(':')?;
++    let prefix = prefix.to_ascii_lowercase();
++    if prefix != "rgb" && prefix != "rgba" {
++        return None;
++    }
++
++    let mut parts = values.split('/');
++    let r = parse_osc_component(parts.next()?)?;
++    let g = parse_osc_component(parts.next()?)?;
++    let b = parse_osc_component(parts.next()?)?;
++
++    match prefix.as_str() {
++        "rgb" => {
++            if parts.next().is_some() {
++                return None;
++            }
++        }
++        "rgba" => {
++            // Validate alpha component but ignore it.
++            parse_osc_component(parts.next()?)?;
++            if parts.next().is_some() {
++                return None;
++            }
++        }
++        _ => unreachable!(),
++    }
++
++    Some((r, g, b))
++}
++
++fn parse_osc_component(component: &str) -> Option<u8> {
++    match component.len() {
++        2 => u8::from_str_radix(component, 16).ok(),
++        4 => u16::from_str_radix(component, 16)
++            .ok()
++            .map(|value| (value / 257) as u8),
++        _ => None,
++    }
+ }
+ 
+ impl TryFrom<&str> for Color {
+@@ -337,7 +384,7 @@ impl<'de> serde::de::Deserialize<'de> for Color {
+ 
+ #[cfg(test)]
+ mod tests {
+-    use super::Color;
++    use super::{parse_osc_rgb, Color};
+ 
+     #[test]
+     fn test_known_color_conversion() {
+@@ -377,6 +424,32 @@ mod tests {
+             }
+         );
+     }
++
++    #[test]
++    fn test_parse_osc_rgb_short_components() {
++        assert_eq!(parse_osc_rgb("rgb:ff/00/7f"), Some((255, 0, 127)));
++    }
++
++    #[test]
++    fn test_parse_osc_rgb_long_components() {
++        assert_eq!(parse_osc_rgb("rgb:ffff/8000/0000"), Some((255, 128, 0)));
++    }
++
++    #[test]
++    fn test_parse_osc_rgba_ignored_alpha() {
++        assert_eq!(
++            parse_osc_rgb("rgba:aaaa/bbbb/cccc/dddd"),
++            Some((170, 187, 204))
++        );
++    }
++
++    #[test]
++    fn test_parse_osc_rgb_invalid_payload() {
++        assert_eq!(parse_osc_rgb("rgb:?"), None);
++        assert_eq!(parse_osc_rgb("rgb:ff/00"), None);
++        assert_eq!(parse_osc_rgb("rgba:ff/00/00"), None);
++        assert_eq!(parse_osc_rgb("rgb:ff/00/00/11"), None);
++    }
+ }
+ 
+ #[cfg(test)]
+-- 
+2.43.0
+

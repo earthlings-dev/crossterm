@@ -55,12 +55,10 @@ fn query_color_slot_raw(slot: u8) -> io::Result<Option<Color>> {
                 _ => continue,
             },
             Ok(false) => {
-                return Err(io::Error::other(
-                    format!(
-                        "The terminal did not report OSC color {} within a normal duration",
-                        slot
-                    ),
-                ));
+                return Err(io::Error::other(format!(
+                    "The terminal did not report OSC color {} within a normal duration",
+                    slot
+                )));
             }
             Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
             Err(err) => return Err(err),
