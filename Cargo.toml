@@ -10,7 +10,7 @@ keywords = ["event", "color", "cli", "input", "terminal"]
 exclude = ["target", "Cargo.lock"]
 readme = "README.md"
 edition = "2024"
-rust-version = "1.92.0"
+rust-version = "1.93.0"
 categories = ["command-line-interface", "command-line-utilities"]
 
 [lib]
@@ -56,7 +56,7 @@ osc52 = ["dep:base64"]
 [dependencies]
 base64 = { version = "0.22.1", optional = true }
 bitflags = { version = "2.10.0" }
-derive_more = { version = "2.1.0", features = ["is_variant"], optional = true }
+derive_more = { version = "2.1.1", features = ["is_variant"], optional = true }
 document-features = { version = "0.2.12", optional = true }
 futures-core = { version = "0.3.31", optional = true, default-features = false }
 parking_lot = "0.12.5"
@@ -72,9 +72,9 @@ winapi = { version = "0.3.9", optional = true, features = ["winuser", "winerror"
 filedescriptor = { version = "0.8.3", optional = true }
 # Default to using rustix for UNIX systems, but provide an option to use libc for backwards
 # compatibility.
-libc = { version = "1.0.0-alpha.1", default-features = false, optional = true }
+libc = { version = "1.0.0-alpha.2", default-features = false, optional = true }
 mio = { version = "1.1.1", features = ["os-poll"], optional = true }
-rustix = { version = "1.1.2", default-features = false, features = ["std", "stdio", "termios"] }
+rustix = { version = "1.1.3", default-features = false, features = ["std", "stdio", "termios"] }
 signal-hook = { version = "0.3.18", optional = true }
 signal-hook-mio = { version = "0.2.5", features = ["support-v1_0"], optional = true }
 
@@ -82,10 +82,10 @@ signal-hook-mio = { version = "0.2.5", features = ["support-v1_0"], optional = t
 async-std = "1.13.2"
 futures = "0.3.31"
 futures-timer = "3.0.3"
-serde_json = "1.0.145"
-serial_test = "3.2.0"
+serde_json = "1.0.149"
+serial_test = "3.3.1"
 temp-env = "0.3.6"
-tokio = { version = "1.48.0", features = ["full"] }
+tokio = { version = "1.49.0", features = ["full"] }
 
 # Examples
 [[example]]
