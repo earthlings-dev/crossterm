@@ -1,3 +1,56 @@
+[workspace]
+members = ["examples/interactive-demo"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.93"
+
+[workspace.dependencies]
+# Internal crates
+crossterm = { version = "0.29.2", path = "." }
+
+# External dependencies
+async-std = { version = "1.13.2" }
+base64 = { version = "0.22.1" }
+bitflags = { version = "2.10.0" }
+crossterm_winapi = { version = "0.9.1" }
+derive_more = { version = "2.1.1", features = ["is_variant"] }
+document-features = { version = "0.2.12" }
+filedescriptor = { version = "0.8.3" }
+futures = { version = "0.4.0-alpha.0" }
+futures-core = { version = "1.0.0-alpha.0", default-features = false }
+futures-timer = { version = "3.0.3" }
+libc = { version = "1.0.0-alpha.3", default-features = false }
+mio = { version = "1.1.1", features = ["os-poll"] }
+parking_lot = { version = "0.12.5" }
+rustix = { version = "1.1.3", default-features = false, features = ["std", "stdio", "termios"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149" }
+serial_test = { version = "3.3.1" }
+signal-hook = { version = "0.4.3" }
+signal-hook-mio = { version = "0.3.0", features = ["support-v1_0"] }
+temp-env = { version = "0.3.6" }
+tokio = { version = "1.49.0", features = ["full"] }
+winapi = { version = "0.3.9", features = ["winuser", "winerror"] }
+
+[patch.crates-io]
+futures = { git = "https://github.com/earthlings-dev/futures-rs.git" }
+futures-channel = { git = "https://github.com/earthlings-dev/futures-rs.git" }
+futures-core = { git = "https://github.com/earthlings-dev/futures-rs.git" }
+futures-executor = { git = "https://github.com/earthlings-dev/futures-rs.git" }
+futures-io = { git = "https://github.com/earthlings-dev/futures-rs.git" }
+futures-macro = { git = "https://github.com/earthlings-dev/futures-rs.git" }
+futures-sink = { git = "https://github.com/earthlings-dev/futures-rs.git" }
+futures-task = { git = "https://github.com/earthlings-dev/futures-rs.git" }
+futures-util = { git = "https://github.com/earthlings-dev/futures-rs.git" }
+semver = { git = "https://github.com/earthlings-dev/semver.git" }
+serde = { git = "https://github.com/earthlings-dev/serde.git" }
+serde_core = { git = "https://github.com/earthlings-dev/serde.git" }
+serde_derive = { git = "https://github.com/earthlings-dev/serde.git" }
+serde_json = { git = "https://github.com/earthlings-dev/json.git" }
+tokio = { git = "https://github.com/earthlings-dev/tokio.git" }
+tokio-macros = { git = "https://github.com/earthlings-dev/tokio.git" }
+
 [package]
 name = "crossterm"
 version = "0.29.2"
@@ -9,8 +62,8 @@ license = "MIT"
 keywords = ["event", "color", "cli", "input", "terminal"]
 exclude = ["target", "Cargo.lock"]
 readme = "README.md"
-edition = "2024"
-rust-version = "1.93.0"
+edition.workspace = true
+rust-version.workspace = true
 categories = ["command-line-interface", "command-line-utilities"]
 
 [lib]
@@ -54,38 +107,38 @@ use-dev-tty = ["filedescriptor", "rustix/process"]
 osc52 = ["dep:base64"]
 
 [dependencies]
-base64 = { version = "0.22.1", optional = true }
-bitflags = { version = "2.10.0" }
-derive_more = { version = "2.1.1", features = ["is_variant"], optional = true }
-document-features = { version = "0.2.12", optional = true }
-futures-core = { version = "0.3.31", optional = true, default-features = false }
-parking_lot = "0.12.5"
-serde = { version = "1.0.228", features = ["derive"], optional = true }
+base64 = { workspace = true, optional = true }
+bitflags = { workspace = true }
+derive_more = { workspace = true, features = ["is_variant"], optional = true }
+document-features = { workspace = true, optional = true }
+futures-core = { workspace = true, optional = true }
+parking_lot = { workspace = true }
+serde = { workspace = true, features = ["derive"], optional = true }
 
 # Windows dependencies
 [target.'cfg(windows)'.dependencies]
-crossterm_winapi = { version = "0.9.1", optional = true }
-winapi = { version = "0.3.9", optional = true, features = ["winuser", "winerror"] }
+crossterm_winapi = { workspace = true, optional = true }
+winapi = { workspace = true, features = ["winuser", "winerror"], optional = true }
 
 # UNIX dependencies
 [target.'cfg(unix)'.dependencies]
-filedescriptor = { version = "0.8.3", optional = true }
+filedescriptor = { workspace = true, optional = true }
 # Default to using rustix for UNIX systems, but provide an option to use libc for backwards
 # compatibility.
-libc = { version = "1.0.0-alpha.2", default-features = false, optional = true }
-mio = { version = "1.1.1", features = ["os-poll"], optional = true }
-rustix = { version = "1.1.3", default-features = false, features = ["std", "stdio", "termios"] }
-signal-hook = { version = "0.4.3", optional = true }
-signal-hook-mio = { version = "0.3.0", features = ["support-v1_0"], optional = true }
+libc = { workspace = true, optional = true }
+mio = { workspace = true, features = ["os-poll"], optional = true }
+rustix = { workspace = true, features = ["std", "stdio", "termios"] }
+signal-hook = { workspace = true, optional = true }
+signal-hook-mio = { workspace = true, features = ["support-v1_0"], optional = true }
 
 [dev-dependencies]
-async-std = "1.13.2"
-futures = "0.3.31"
-futures-timer = "3.0.3"
-serde_json = "1.0.149"
-serial_test = "3.3.1"
-temp-env = "0.3.6"
-tokio = { version = "1.49.0", features = ["full"] }
+async-std = { workspace = true }
+futures = { workspace = true }
+futures-timer = { workspace = true }
+serde_json = { workspace = true }
+serial_test = { workspace = true }
+temp-env = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 
 # Examples
 [[example]]
