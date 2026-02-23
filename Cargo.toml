@@ -34,22 +34,22 @@ tokio = { version = "1.49.0", features = ["full"] }
 winapi = { version = "0.3.9", features = ["winuser", "winerror"] }
 
 [patch.crates-io]
-futures = { git = "https://github.com/earthlings-dev/futures-rs.git" }
-futures-channel = { git = "https://github.com/earthlings-dev/futures-rs.git" }
-futures-core = { git = "https://github.com/earthlings-dev/futures-rs.git" }
-futures-executor = { git = "https://github.com/earthlings-dev/futures-rs.git" }
-futures-io = { git = "https://github.com/earthlings-dev/futures-rs.git" }
-futures-macro = { git = "https://github.com/earthlings-dev/futures-rs.git" }
-futures-sink = { git = "https://github.com/earthlings-dev/futures-rs.git" }
-futures-task = { git = "https://github.com/earthlings-dev/futures-rs.git" }
-futures-util = { git = "https://github.com/earthlings-dev/futures-rs.git" }
-semver = { git = "https://github.com/earthlings-dev/semver.git" }
-serde = { git = "https://github.com/earthlings-dev/serde.git" }
-serde_core = { git = "https://github.com/earthlings-dev/serde.git" }
-serde_derive = { git = "https://github.com/earthlings-dev/serde.git" }
-serde_json = { git = "https://github.com/earthlings-dev/json.git" }
-tokio = { git = "https://github.com/earthlings-dev/tokio.git" }
-tokio-macros = { git = "https://github.com/earthlings-dev/tokio.git" }
+futures = { path = "../futures-rs/futures" }
+futures-channel = { path = "../futures-rs/futures-channel" }
+futures-core = { path = "../futures-rs/futures-core" }
+futures-executor = { path = "../futures-rs/futures-executor" }
+futures-io = { path = "../futures-rs/futures-io" }
+futures-macro = { path = "../futures-rs/futures-macro" }
+futures-sink = { path = "../futures-rs/futures-sink" }
+futures-task = { path = "../futures-rs/futures-task" }
+futures-util = { path = "../futures-rs/futures-util" }
+semver = { path = "../semver" }
+serde = { path = "../serde/serde" }
+serde_core = { path = "../serde/serde_core" }
+serde_derive = { path = "../serde/serde_derive" }
+serde_json = { path = "../json" }
+tokio = { path = "../tokio/tokio" }
+tokio-macros = { path = "../tokio/tokio-macros" }
 
 [package]
 name = "crossterm"
